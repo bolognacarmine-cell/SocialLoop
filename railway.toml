@@ -1,0 +1,10 @@
+[build]
+  builder = "NIXPACKS"
+  buildCommand = "pnpm install --frozen-lockfile && pnpm prisma generate && pnpm next build"
+
+[deploy]
+  startCommand = "pnpm next start -p ${PORT:-3000}"
+  healthcheckPath = "/api/health"
+  healthcheckTimeout = 120
+  restartPolicyType = "ON_FAILURE"
+  restartPolicyMaxRetries = 10

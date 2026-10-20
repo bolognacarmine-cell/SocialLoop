@@ -1,0 +1,9 @@
+# Configurazione per il servizio "worker" su Railway.
+# Railway usa automaticamente railway.toml alla root; per il worker imposta
+# la variabile d'ambiente RAILWAY_DOCKERFILE_PATH=Dockerfile.worker sul servizio.
+# Questo file è solo documentativo.
+
+[deploy]
+  startCommand = "pnpm worker"
+  restartPolicyType = "ON_FAILURE"
+  restartPolicyMaxRetries = 10

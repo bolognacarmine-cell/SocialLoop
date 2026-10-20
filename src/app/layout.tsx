@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { ensureEmbeddedWorker } from "@/lib/worker/embedded";
 
 export const metadata: Metadata = {
   title: {
@@ -12,6 +13,10 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  // Belt and braces: the health route is the primary trigger (Render polls it),
+  // this covers the case where no request has arrived yet.
+  void ensureEmbeddedWorker();
+
   return (
     <html lang="it">
       <body className="min-h-screen bg-slate-50">{children}</body>

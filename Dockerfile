@@ -63,7 +63,10 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+# No COPY of node_modules/.prisma or node_modules/@prisma here: with pnpm's
+# isolated layout neither path exists at the top level. The generated client
+# (plus libquery_engine-*.so.node) lives in node_modules/.pnpm/... and is
+# already traced into .next/standalone/node_modules by output: "standalone",
+# which is what `node server.js` resolves against.
 EXPOSE 3000
 CMD ["node", "server.js"]

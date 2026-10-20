@@ -1,0 +1,818 @@
+// SocialLoop data model
+// Multi-tenant by Workspace. Every business entity is scoped to a workspace.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum Plan {
+  FREE
+  PRO
+  AGENCY
+}
+
+enum MembershipRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum SocialPlatform {
+  INSTAGRAM
+  FACEBOOK
+  LINKEDIN
+  X
+  TIKTOK
+  YOUTUBE
+}
+
+enum SocialAccountStatus {
+  CONNECTED
+  EXPIRED
+  REVOKED
+  ERROR
+}
+
+enum PostStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHING
+  PUBLISHED
+  PARTIAL
+  FAILED
+  CANCELLED
+}
+
+enum PostTargetStatus {
+  PENDING
+  PUBLISHING
+  PUBLISHED
+  FAILED
+}
+
+enum CampaignStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  COMPLETED
+  ARCHIVED
+}
+
+enum LeadStage {
+  NEW
+  CONTACTED
+  QUALIFIED
+  NURTURING
+  OFFER_SENT
+  WON
+  LOST
+}
+
+enum LeadSource {
+  ORGANIC_SOCIAL
+  LANDING_PAGE
+  FORM
+  ADS
+  REFERRAL
+  IMPORT
+  MANUAL
+}
+
+enum EmailStatus {
+  QUEUED
+  SENDING
+  SENT
+  DELIVERED
+  OPENED
+  CLICKED
+  BOUNCED
+  FAILED
+  CANCELLED
+}
+
+enum WorkflowStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}
+
+enum WorkflowTriggerType {
+  LEAD_CREATED
+  FORM_SUBMITTED
+  LEAD_STAGE_CHANGED
+  TAG_ADDED
+  SCORE_THRESHOLD
+  CONVERSION
+  SOCIAL_POST_PUBLISHED
+  MANUAL
+  SCHEDULE
+}
+
+enum WorkflowRunStatus {
+  PENDING
+  RUNNING
+  WAITING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum WorkflowStepStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  SKIPPED
+  FAILED
+}
+
+enum JobStatus {
+  QUEUED
+  ACTIVE
+  COMPLETED
+  FAILED
+  DELAYED
+}
+
+enum WebhookEventStatus {
+  RECEIVED
+  PROCESSED
+  FAILED
+  IGNORED
+}
+
+enum AnalyticsEventType {
+  PAGE_VIEW
+  FORM_SUBMISSION
+  LEAD_CREATED
+  EMAIL_SENT
+  EMAIL_OPEN
+  EMAIL_CLICK
+  OFFER_VIEW
+  CONVERSION
+  SOCIAL_POST_PUBLISHED
+  SOCIAL_IMPRESSION
+  SOCIAL_CLICK
+  CUSTOM
+}
+
+// ---------------------------------------------------------------------------
+// Accounts & tenancy
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  avatarUrl    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  memberships     Membership[]
+  ownedWorkspaces Workspace[]  @relation("WorkspaceOwner")
+  createdPosts    Post[]       @relation("PostAuthor")
+  createdWorkflows Workflow[]  @relation("WorkflowCreator")
+}
+
+model Workspace {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  plan      Plan     @default(FREE)
+  settings  Json     @default("{}")
+  ownerId   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  owner                User                   @relation("WorkspaceOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  memberships          Membership[]
+  socialAccounts       SocialAccount[]
+  oauthStates          OAuthState[]
+  campaigns            Campaign[]
+  posts                Post[]
+  mediaAssets          MediaAsset[]
+  landingPages         LandingPage[]
+  forms                Form[]
+  leads                Lead[]
+  tags                 Tag[]
+  segments             Segment[]
+  workflows            Workflow[]
+  workflowRuns         WorkflowRun[]
+  emailTemplates       EmailTemplate[]
+  emailSends           EmailSend[]
+  offers               Offer[]
+  conversions          Conversion[]
+  retargetingAudiences RetargetingAudience[]
+  analyticsEvents      AnalyticsEvent[]
+  jobLogs              JobLog[]
+  webhookEvents        WebhookEvent[]
+
+  @@index([ownerId])
+}
+
+model Membership {
+  id          String         @id @default(cuid())
+  userId      String
+  workspaceId String
+  role        MembershipRole @default(MEMBER)
+  createdAt   DateTime       @default(now())
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, workspaceId])
+  @@index([workspaceId])
+}
+
+model SocialAccount {
+  id               String              @id @default(cuid())
+  workspaceId      String
+  platform         SocialPlatform
+  accountName      String
+  externalId       String
+  avatarUrl        String?
+  accessToken      String              @db.Text
+  refreshToken     String?             @db.Text
+  tokenExpiresAt   DateTime?
+  scopes           String[]            @default([])
+  status           SocialAccountStatus @default(CONNECTED)
+  metadata         Json                @default("{}")
+  lastSyncedAt     DateTime?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  postTargets PostTarget[]
+
+  @@unique([workspaceId, platform, externalId])
+  @@index([workspaceId, status])
+}
+
+model OAuthState {
+  state        String         @id
+  workspaceId  String
+  userId       String
+  platform     SocialPlatform
+  codeVerifier String?
+  redirectUri  String?
+  expiresAt    DateTime
+  createdAt    DateTime       @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([expiresAt])
+}
+
+// ---------------------------------------------------------------------------
+// Content & publishing
+// ---------------------------------------------------------------------------
+
+model Campaign {
+  id          String         @id @default(cuid())
+  workspaceId String
+  name        String
+  description String?
+  status      CampaignStatus @default(DRAFT)
+  startAt     DateTime?
+  endAt       DateTime?
+  budgetCents Int?
+  utmSource   String?
+  utmMedium   String?
+  utmCampaign String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  workspace            Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  posts                Post[]
+  leads                Lead[]
+  offers               Offer[]
+  conversions          Conversion[]
+  retargetingAudiences RetargetingAudience[]
+  analyticsEvents      AnalyticsEvent[]
+
+  @@index([workspaceId, status])
+}
+
+model MediaAsset {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String
+  url         String
+  mimeType    String?
+  sizeBytes   Int?
+  createdAt   DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+}
+
+model Post {
+  id          String     @id @default(cuid())
+  workspaceId String
+  campaignId  String?
+  authorId    String?
+  body        String     @db.Text
+  mediaUrls   Json       @default("[]")
+  linkUrl     String?
+  status      PostStatus @default(DRAFT)
+  scheduledAt DateTime?
+  publishedAt DateTime?
+  timezone    String     @default("Europe/Rome")
+  metadata    Json       @default("{}")
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  workspace       Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  campaign        Campaign?        @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  author          User?            @relation("PostAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  targets         PostTarget[]
+  sourceLeads     Lead[]           @relation("LeadSourcePost")
+  analyticsEvents AnalyticsEvent[]
+
+  @@index([workspaceId, status, scheduledAt])
+  @@index([workspaceId, createdAt])
+}
+
+model PostTarget {
+  id              String           @id @default(cuid())
+  postId          String
+  socialAccountId String
+  platform        SocialPlatform
+  status          PostTargetStatus @default(PENDING)
+  remotePostId    String?
+  error           String?          @db.Text
+  attempts        Int              @default(0)
+  publishedAt     DateTime?
+  metrics         Json             @default("{}")
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  post          Post          @relation(fields: [postId], references: [id], onDelete: Cascade)
+  socialAccount SocialAccount @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, socialAccountId])
+  @@index([status])
+}
+
+// ---------------------------------------------------------------------------
+// Landing pages & forms
+// ---------------------------------------------------------------------------
+
+model LandingPage {
+  id             String   @id @default(cuid())
+  workspaceId    String
+  name           String
+  slug           String   @unique
+  published      Boolean  @default(false)
+  headline       String?
+  blocks         Json     @default("[]")
+  seoTitle       String?
+  seoDescription String?
+  customDomain   String?
+  theme          Json     @default("{}")
+  views          Int      @default(0)
+  publishedAt    DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  workspace       Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  form            Form?
+  leads           Lead[]
+  analyticsEvents AnalyticsEvent[]
+
+  @@index([workspaceId, published])
+  @@index([customDomain])
+}
+
+model Form {
+  id             String   @id @default(cuid())
+  workspaceId    String
+  landingPageId  String   @unique
+  name           String
+  fields         Json     @default("[]")
+  submitLabel    String   @default("Ricevi l'offerta")
+  successMessage String   @default("Grazie! Ti abbiamo inviato la guida via email.")
+  redirectUrl    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  workspace   Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  landingPage LandingPage      @relation(fields: [landingPageId], references: [id], onDelete: Cascade)
+  submissions FormSubmission[]
+  leads       Lead[]           @relation("LeadForm")
+
+  @@index([workspaceId])
+}
+
+model FormSubmission {
+  id        String   @id @default(cuid())
+  formId    String
+  leadId    String?
+  data      Json
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  form Form  @relation(fields: [formId], references: [id], onDelete: Cascade)
+  lead Lead? @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  @@index([formId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// CRM, scoring, tags & segments
+// ---------------------------------------------------------------------------
+
+model Lead {
+  id            String     @id @default(cuid())
+  workspaceId   String
+  email         String
+  name          String?
+  phone         String?
+  company       String?
+  jobTitle      String?
+  stage         LeadStage  @default(NEW)
+  score         Int        @default(0)
+  source        LeadSource @default(LANDING_PAGE)
+  campaignId    String?
+  landingPageId String?
+  socialPostId  String?
+  formId        String?
+  consent       Boolean    @default(true)
+  utm           Json       @default("{}")
+  customFields  Json       @default("{}")
+  lastActivityAt DateTime?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  campaign    Campaign?    @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  landingPage LandingPage? @relation(fields: [landingPageId], references: [id], onDelete: SetNull)
+  socialPost  Post?        @relation("LeadSourcePost", fields: [socialPostId], references: [id], onDelete: SetNull)
+  form        Form?        @relation("LeadForm", fields: [formId], references: [id], onDelete: SetNull)
+
+  submissions           FormSubmission[]
+  events                LeadEvent[]
+  tags                  LeadTag[]
+  segments              SegmentMembership[]
+  scoreEvents           LeadScoreEvent[]
+  emailSends            EmailSend[]
+  conversions           Conversion[]
+  workflowRuns          WorkflowRun[]
+  retargetingMemberships RetargetingAudienceMember[]
+
+  @@unique([workspaceId, email])
+  @@index([workspaceId, stage])
+  @@index([workspaceId, score])
+  @@index([workspaceId, createdAt])
+}
+
+model LeadEvent {
+  id        String   @id @default(cuid())
+  leadId    String
+  type      String
+  name      String?
+  metadata  Json     @default("{}")
+  occurredAt DateTime @default(now())
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId, occurredAt])
+}
+
+model Tag {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String
+  color       String   @default("#338fff")
+  createdAt   DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  leads     LeadTag[]
+
+  @@unique([workspaceId, name])
+}
+
+model LeadTag {
+  leadId String
+  tagId  String
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  tag  Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([leadId, tagId])
+}
+
+model LeadScoreEvent {
+  id        String   @id @default(cuid())
+  leadId    String
+  delta     Int
+  reason    String?
+  metadata  Json     @default("{}")
+  createdAt DateTime @default(now())
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId, createdAt])
+}
+
+model Segment {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String
+  description String?
+  rules       Json     @default("{\"match\":\"all\",\"rules\":[]}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  members   SegmentMembership[]
+
+  @@unique([workspaceId, name])
+}
+
+model SegmentMembership {
+  segmentId String
+  leadId    String
+  addedAt   DateTime @default(now())
+
+  segment Segment @relation(fields: [segmentId], references: [id], onDelete: Cascade)
+  lead    Lead    @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@id([segmentId, leadId])
+  @@index([leadId])
+}
+
+// ---------------------------------------------------------------------------
+// Email nurture
+// ---------------------------------------------------------------------------
+
+model EmailTemplate {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String
+  subject     String
+  html        String   @db.Text
+  text        String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  sends     EmailSend[]
+
+  @@index([workspaceId])
+}
+
+model EmailSend {
+  id            String      @id @default(cuid())
+  workspaceId   String
+  leadId        String?
+  templateId    String?
+  workflowRunId String?
+  toEmail       String
+  subject       String
+  html          String      @db.Text
+  status        EmailStatus @default(QUEUED)
+  scheduledAt   DateTime?
+  sentAt        DateTime?
+  openedAt      DateTime?
+  clickedAt     DateTime?
+  providerId    String?
+  error         String?     @db.Text
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  lead        Lead?        @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  template    EmailTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  workflowRun WorkflowRun? @relation(fields: [workflowRunId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, status])
+  @@index([leadId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Offers, conversions & retargeting
+// ---------------------------------------------------------------------------
+
+model Offer {
+  id          String   @id @default(cuid())
+  workspaceId String
+  campaignId  String?
+  name        String
+  description String?
+  priceCents  Int      @default(0)
+  currency    String   @default("EUR")
+  checkoutUrl String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  campaign    Campaign?    @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  conversions Conversion[]
+
+  @@index([workspaceId, active])
+}
+
+model Conversion {
+  id          String   @id @default(cuid())
+  workspaceId String
+  leadId      String?
+  offerId     String?
+  campaignId  String?
+  valueCents  Int      @default(0)
+  currency    String   @default("EUR")
+  occurredAt  DateTime @default(now())
+  metadata    Json     @default("{}")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  lead      Lead?     @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  offer     Offer?    @relation(fields: [offerId], references: [id], onDelete: SetNull)
+  campaign  Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, occurredAt])
+  @@index([campaignId])
+}
+
+model RetargetingAudience {
+  id          String         @id @default(cuid())
+  workspaceId String
+  campaignId  String?
+  name        String
+  platform    SocialPlatform?
+  status      String         @default("DRAFT")
+  filter      Json           @default("{}")
+  externalId  String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  workspace Workspace                    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  campaign  Campaign?                    @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  members   RetargetingAudienceMember[]
+
+  @@index([workspaceId])
+}
+
+model RetargetingAudienceMember {
+  audienceId String
+  leadId     String
+  status     String   @default("PENDING")
+  addedAt    DateTime @default(now())
+
+  audience RetargetingAudience @relation(fields: [audienceId], references: [id], onDelete: Cascade)
+  lead     Lead                @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@id([audienceId, leadId])
+  @@index([leadId])
+}
+
+// ---------------------------------------------------------------------------
+// Workflows
+// ---------------------------------------------------------------------------
+
+model Workflow {
+  id            String              @id @default(cuid())
+  workspaceId   String
+  name          String
+  description   String?
+  status        WorkflowStatus      @default(DRAFT)
+  triggerType   WorkflowTriggerType
+  triggerConfig Json                @default("{}")
+  steps         Json                @default("[]")
+  createdById   String?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  workspace Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  creator   User?         @relation("WorkflowCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  runs      WorkflowRun[]
+
+  @@index([workspaceId, status, triggerType])
+}
+
+model WorkflowRun {
+  id          String            @id @default(cuid())
+  workspaceId String
+  workflowId  String
+  leadId      String?
+  status      WorkflowRunStatus @default(PENDING)
+  currentStep Int               @default(0)
+  context     Json              @default("{}")
+  nextRunAt   DateTime?
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  error       String?           @db.Text
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  workspace   Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workflow    Workflow         @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  lead        Lead?            @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  steps       WorkflowRunStep[]
+  emailSends  EmailSend[]
+
+  @@index([workspaceId, status])
+  @@index([workflowId, status])
+}
+
+model WorkflowRunStep {
+  id         String             @id @default(cuid())
+  runId      String
+  stepIndex  Int
+  type       String
+  status     WorkflowStepStatus @default(PENDING)
+  output     Json               @default("{}")
+  error      String?            @db.Text
+  executedAt DateTime?
+  createdAt  DateTime           @default(now())
+
+  run WorkflowRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, stepIndex])
+  @@index([runId])
+}
+
+// ---------------------------------------------------------------------------
+// Analytics & operations
+// ---------------------------------------------------------------------------
+
+model AnalyticsEvent {
+  id            String             @id @default(cuid())
+  workspaceId   String
+  type          AnalyticsEventType
+  name          String
+  leadId        String?
+  campaignId    String?
+  socialPostId  String?
+  landingPageId String?
+  offerId       String?
+  value         Float?
+  currency      String?
+  metadata      Json               @default("{}")
+  occurredAt    DateTime           @default(now())
+
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  campaign    Campaign?    @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  socialPost  Post?        @relation(fields: [socialPostId], references: [id], onDelete: SetNull)
+  landingPage LandingPage? @relation(fields: [landingPageId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, occurredAt])
+  @@index([workspaceId, type, occurredAt])
+  @@index([campaignId, occurredAt])
+}
+
+model JobLog {
+  id          String    @id @default(cuid())
+  workspaceId String
+  queue       String
+  name        String
+  jobId       String?
+  status      JobStatus @default(QUEUED)
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(3)
+  payload     Json      @default("{}")
+  result      Json      @default("{}")
+  error       String?   @db.Text
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  durationMs  Int?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, createdAt])
+  @@index([queue, status])
+}
+
+model WebhookEvent {
+  id          String              @id @default(cuid())
+  workspaceId String?
+  platform    SocialPlatform
+  eventType   String
+  externalId  String?
+  payload     Json
+  headers     Json              @default("{}")
+  status      WebhookEventStatus @default(RECEIVED)
+  error       String?           @db.Text
+  processedAt DateTime?
+  createdAt   DateTime          @default(now())
+
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+
+  @@unique([platform, externalId])
+  @@index([workspaceId, createdAt])
+}

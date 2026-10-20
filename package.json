@@ -2,6 +2,7 @@
   "name": "socialloop",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@10.31.0",
   "description": "SocialLoop - social publishing, lead funnels, CRM and marketing automation for growing teams",
   "scripts": {
     "dev": "next dev",

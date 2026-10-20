@@ -39,8 +39,16 @@ export const env = envSchema.parse(process.env);
 
 export const isProduction = env.NODE_ENV === "production";
 
-if (isProduction && (env.AUTH_SECRET === DEV_AUTH_SECRET || env.TOKEN_ENCRYPTION_KEY === DEV_ENCRYPTION_KEY)) {
-  // Fail loudly in production, but keep local builds usable.
+const isBuildPhase = process.env.NEXT_PHASE === "phase-production-build";
+
+if (
+  !isBuildPhase &&
+  isProduction &&
+  (env.AUTH_SECRET === DEV_AUTH_SECRET || env.TOKEN_ENCRYPTION_KEY === DEV_ENCRYPTION_KEY)
+) {
+  // Fail loudly at runtime in production; during `next build` the secrets are
+  // not available yet (they are injected when the container starts), so the
+  // build itself must not depend on them.
   throw new Error(
     "AUTH_SECRET and TOKEN_ENCRYPTION_KEY must be configured with real values in production."
   );

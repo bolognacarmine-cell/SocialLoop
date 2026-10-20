@@ -1,10 +1,29 @@
 # syntax=docker/dockerfile:1
 
+# NOTE ON STAGE ORDER: `web` must be the LAST stage. Docker builds the final
+# stage when no --target is given, which is what Render does — if `worker`
+# came last, Render would start `pnpm worker`, a process that binds no port,
+# and fail with "No open ports detected". docker-compose.yml pins
+# target: web explicitly, which is why this only breaks on Render.
+# To build the worker image instead: docker build -f Dockerfile --target worker .
+
 FROM node:24-slim AS base
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 RUN corepack enable
+
+# Prisma ships a native engine (libquery_engine-debian-openssl-3.0.x.so.node)
+# that dlopens libssl.so.3 / libcrypto.so.3. Node links OpenSSL statically, so
+# node:24-slim ships neither the libraries nor the `openssl` CLI Prisma runs to
+# detect its platform — without this, `pnpm install` fails with
+# "Please manually install OpenSSL". Installing in `base` covers the deps
+# stage (engine download), the builder stage (prisma generate) and the web
+# runtime, which loads the same engine at query time.
+RUN apt-get update -y \
+  && apt-get install -y --no-install-recommends openssl \
+  && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # ---------------------------------------------------------------------------
@@ -23,7 +42,20 @@ COPY . .
 RUN pnpm prisma generate && pnpm next build
 
 # ---------------------------------------------------------------------------
-# Web runtime
+# Worker runtime (BullMQ + scheduled publisher)
+# Built only via an explicit --target; must stay above `web`.
+# ---------------------------------------------------------------------------
+FROM base AS worker
+ENV NODE_ENV=production
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/tsconfig.json ./tsconfig.json
+COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/src ./src
+CMD ["pnpm", "worker"]
+
+# ---------------------------------------------------------------------------
+# Web runtime — LAST STAGE: this is what an untargeted `docker build` produces.
 # ---------------------------------------------------------------------------
 FROM base AS web
 ENV NODE_ENV=production
@@ -35,15 +67,3 @@ COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 EXPOSE 3000
 CMD ["node", "server.js"]
-
-# ---------------------------------------------------------------------------
-# Worker runtime (BullMQ + scheduled publisher)
-# ---------------------------------------------------------------------------
-FROM base AS worker
-ENV NODE_ENV=production
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/tsconfig.json ./tsconfig.json
-COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/src ./src
-CMD ["pnpm", "worker"]

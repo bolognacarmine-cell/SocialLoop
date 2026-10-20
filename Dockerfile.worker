@@ -5,6 +5,14 @@ ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 RUN corepack enable
+
+# Same reason as Dockerfile: Prisma's native engine dlopens libssl.so.3 and the
+# CLI needs `openssl version` to detect its platform during pnpm install and
+# prisma generate.
+RUN apt-get update -y \
+  && apt-get install -y --no-install-recommends openssl \
+  && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # ---------------------------------------------------------------------------

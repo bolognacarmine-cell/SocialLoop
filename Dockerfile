@@ -59,6 +59,12 @@ CMD ["pnpm", "worker"]
 # ---------------------------------------------------------------------------
 FROM base AS web
 ENV NODE_ENV=production
+# Docker sets HOSTNAME to the container ID, and Next's standalone server.js does
+# `hostname = process.env.HOSTNAME || '0.0.0.0'` — the fallback never applies, so
+# it tries to bind to the container ID and dies with
+# "getaddrinfo ENOTFOUND <container-id>" before listening, which surfaces as a
+# 502 Bad Gateway. Force all interfaces.
+ENV HOSTNAME=0.0.0.0
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static

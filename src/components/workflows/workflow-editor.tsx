@@ -131,13 +131,15 @@ export function WorkflowEditor({
     const response = await fetch(`/api/workflows/${workflow.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
+      // Non mandiamo "status": qui "status" è il messaggio di stato della UI
+      // (null o testo libero), non lo stato del workflow. Lo stato cambia solo
+      // tramite POST /workflows/[id]/activate, quindi lo lasciamo fuori dalla PATCH.
       body: JSON.stringify({
         name,
         description: description || null,
         triggerType,
         triggerConfig,
-        steps,
-        status
+        steps
       })
     });
     const data = await response.json().catch(() => ({}));

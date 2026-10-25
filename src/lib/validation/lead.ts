@@ -38,6 +38,18 @@ export const leadTagSchema = z.object({
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional()
 });
 
+// Il form pubblico manda sempre tutte le chiavi UTM, con valore null quando
+// il parametro non è presente nell'URL. Accettiamo stringhe o null e teniamo
+// solo i valori realmente valorizzati, così l'assenza di UTM non blocca l'invio.
+const utmTrackingSchema = z
+  .record(z.union([z.string(), z.null()]))
+  .default({})
+  .transform((entry) =>
+    Object.fromEntries(
+      Object.entries(entry).filter(([, value]) => typeof value === "string" && value.trim() !== "")
+    )
+  );
+
 export const publicLeadSubmissionSchema = z.object({
   email: emailSchema,
   name: z.string().trim().max(120).optional(),
@@ -45,7 +57,7 @@ export const publicLeadSubmissionSchema = z.object({
   company: z.string().trim().max(120).optional(),
   consent: z.boolean().default(true),
   fields: z.record(z.union([z.string(), z.boolean(), z.number(), z.null()])).default({}),
-  utm: z.record(z.string()).default({}),
+  utm: utmTrackingSchema,
   campaignId: z.string().optional(),
   socialPostId: z.string().optional()
 });

@@ -64,6 +64,20 @@ export function LeadForm({
       }
     }
 
+    // Inviamo solo gli UTM presenti nell'URL: params.get restituisce null se
+    // il parametro manca e quei null mandavano l'intero invio in 422.
+    const utm: Record<string, string> = {};
+    const utmParams: Array<[string, string | null]> = [
+      ["source", params.get("utm_source")],
+      ["medium", params.get("utm_medium")],
+      ["campaign", params.get("utm_campaign")],
+      ["content", params.get("utm_content")],
+      ["term", params.get("utm_term")]
+    ];
+    for (const [key, value] of utmParams) {
+      if (value) utm[key] = value;
+    }
+
     const response = await fetch(`/api/public/forms/${formId}/submit`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -74,13 +88,7 @@ export function LeadForm({
         company: values.company || undefined,
         consent: values.consent === "true",
         fields: values,
-        utm: {
-          source: params.get("utm_source"),
-          medium: params.get("utm_medium"),
-          campaign: params.get("utm_campaign"),
-          content: params.get("utm_content"),
-          term: params.get("utm_term")
-        }
+        utm
       })
     });
 

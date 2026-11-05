@@ -15,7 +15,7 @@ export const postCreateSchema = z
     scheduledAt: dateOrNull,
     timezone: z.string().default("Europe/Rome"),
     socialAccountIds: z.array(z.string()).default([]),
-    metadata: z.record(z.unknown()).default({})
+    metadata: z.record(z.string(), z.unknown()).default({})
   })
   .superRefine((value, ctx) => {
     if (value.status === "SCHEDULED" && !value.scheduledAt) {
@@ -43,7 +43,7 @@ export const postUpdateSchema = z.object({
   scheduledAt: dateOrNull,
   timezone: z.string().optional(),
   socialAccountIds: z.array(z.string()).optional(),
-  metadata: z.record(z.unknown()).optional()
+  metadata: z.record(z.string(), z.unknown()).optional()
 });
 
 export const schedulePostSchema = z.object({

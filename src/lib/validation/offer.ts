@@ -18,7 +18,7 @@ export const conversionCreateSchema = z.object({
   campaignId: z.string().optional().nullable(),
   valueCents: z.coerce.number().int().min(0).default(0),
   currency: z.string().length(3).default("EUR"),
-  metadata: z.record(z.unknown()).default({}),
+  metadata: z.record(z.string(), z.unknown()).default({}),
   occurredAt: z.coerce.date().optional()
 });
 
@@ -26,6 +26,6 @@ export const retargetingAudienceCreateSchema = z.object({
   name: z.string().trim().min(2).max(120),
   platform: z.enum(["INSTAGRAM", "FACEBOOK", "LINKEDIN", "X", "TIKTOK", "YOUTUBE"]).optional(),
   campaignId: z.string().optional().nullable(),
-  filter: z.record(z.unknown()).default({}),
+  filter: z.record(z.string(), z.unknown()).default({}),
   leadIds: z.array(z.string()).default([])
 });

@@ -17,8 +17,8 @@ export const leadCreateSchema = z.object({
   landingPageId: z.string().optional().nullable(),
   socialPostId: z.string().optional().nullable(),
   consent: z.boolean().default(true),
-  utm: z.record(z.string()).default({}),
-  customFields: z.record(z.unknown()).default({}),
+  utm: z.record(z.string(), z.string()).default({}),
+  customFields: z.record(z.string(), z.unknown()).default({}),
   tags: z.array(z.string().trim().min(1).max(60)).max(20).default([])
 });
 
@@ -29,7 +29,7 @@ export const leadUpdateSchema = z.object({
   jobTitle: z.string().trim().max(120).nullable().optional(),
   stage: leadStageSchema.optional(),
   consent: z.boolean().optional(),
-  customFields: z.record(z.unknown()).optional(),
+  customFields: z.record(z.string(), z.unknown()).optional(),
   score: z.coerce.number().int().min(0).max(1000).optional()
 });
 
@@ -42,7 +42,7 @@ export const leadTagSchema = z.object({
 // il parametro non è presente nell'URL. Accettiamo stringhe o null e teniamo
 // solo i valori realmente valorizzati, così l'assenza di UTM non blocca l'invio.
 const utmTrackingSchema = z
-  .record(z.union([z.string(), z.null()]))
+  .record(z.string(), z.union([z.string(), z.null()]))
   .default({})
   .transform((entry) =>
     Object.fromEntries(
@@ -56,7 +56,7 @@ export const publicLeadSubmissionSchema = z.object({
   phone: z.string().trim().max(40).optional(),
   company: z.string().trim().max(120).optional(),
   consent: z.boolean().default(true),
-  fields: z.record(z.union([z.string(), z.boolean(), z.number(), z.null()])).default({}),
+  fields: z.record(z.string(), z.union([z.string(), z.boolean(), z.number(), z.null()])).default({}),
   utm: utmTrackingSchema,
   campaignId: z.string().optional(),
   socialPostId: z.string().optional()

@@ -23,7 +23,7 @@ const beaconSchema = z.object({
   type: z.literal("PAGE_VIEW"),
   landingPageId: z.string().nullish(),
   utm: z
-    .record(z.union([z.string(), z.null()]))
+    .record(z.string(), z.union([z.string(), z.null()]))
     .nullish()
     .transform((value) =>
       Object.fromEntries(

@@ -49,7 +49,7 @@ export const landingPageCreateSchema = z.object({
   seoTitle: z.string().max(200).optional(),
   seoDescription: z.string().max(400).optional(),
   customDomain: z.string().trim().max(200).optional().nullable(),
-  theme: z.record(z.unknown()).default({}),
+  theme: z.record(z.string(), z.unknown()).default({}),
   published: z.boolean().default(false),
   form: z
     .object({

@@ -25,4 +25,4 @@ export const optionalUrl = z
   .optional()
   .transform((value) => value || null);
 
-export const jsonObject = z.record(z.unknown());
+export const jsonObject = z.record(z.string(), z.unknown());
